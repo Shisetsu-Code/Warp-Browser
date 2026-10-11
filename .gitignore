@@ -1,0 +1,9 @@
+node_modules/
+playwright-report/
+test-results/
+*.log
+*.har
+*.har.zip
+*.ndjson
+*.meta.json
+.DS_Store

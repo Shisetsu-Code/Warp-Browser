@@ -1,0 +1,16 @@
+{
+  "name": "warp-browser",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native-tab Chromium browser driven by Playwright, with per-tab HAR recording and adjustable game time.",
+  "type": "commonjs",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.js",
+    "recover": "node src/index.js --recover",
+    "test": "node --test test/har.test.js test/manager.test.js test/dialog.test.js",
+    "test:e2e": "node --test test/integration.test.js",
+    "check": "node --check src/index.js && node --check src/preload.js && node --check src/har.js && node --check src/manager.js && node --check src/dialog.js"
+  },
+  "dependencies": { "playwright": "1.64.0" }
+}
