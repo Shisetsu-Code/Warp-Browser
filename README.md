@@ -24,7 +24,7 @@ En Linux/macOS se utilizan los mismos tres comandos de la terminal (sin el `.bat
 ## Uso
 
 - **Pestañas:** `Ctrl+T` abre una pestaña, `Ctrl+W` cierra la actual. También funcionan las pestañas que abren los sitios mediante `window.open()`.
-- **Velocidad:** panel **WARP** arriba a la derecha de cada página, con botones 1×–16×. **Alt+W** lo oculta o muestra. El ajuste es individual por pestaña y se aplica también a sus iframes.
+- **Velocidad:** etiqueta **WARP** plegable arriba a la derecha de cada página, con botones 1×–16×. **Alt+W** lo oculta o muestra. El ajuste es individual por pestaña y se aplica también a sus iframes.
 - **HAR:** la captura se inicia automáticamente antes de la primera navegación. Al cerrar una pestaña se consolida un archivo `.har` y se abre **Guardar como** para elegir ubicación y nombre.
 - **Cancelación:** si se cancela el diálogo, el archivo **no se descarta**: queda en el directorio de recuperación. `recover-windows.bat` o `npm run recover` lo recupera y vuelve a ofrecer guardarlo.
 - **Varias pestañas cerradas:** los diálogos se presentan secuencialmente, uno por captura. No se mezclan los HAR de las diferentes pestañas.
@@ -33,9 +33,13 @@ En Linux/macOS se utilizan los mismos tres comandos de la terminal (sin el `.bat
 
 Requests HTTP y HTTPS sin filtrado de URL ni método: navegación, fetch/XHR, POSTs, headers, query strings, request bodies, respuestas, contenidos textuales y binarios (por ejemplo JS, imágenes o WebAssembly), tiempos y requests fallidas. El HAR usa el estándar 1.2. Los **mensajes de WebSocket** enviados/recibidos se adjuntan como una extensión del HAR (`log._warpWebSockets`) ya que las tramas no forman parte del formato HAR estándar. Requests de service workers que no pueden asociarse a una pestaña se guardan en una captura adicional al terminar la sesión.
 
-### Alcance real de la aceleración
+### Alcance real de la aceleración (v0.1.1: clics compatibles)
 
-Acelerar los temporizadores de JavaScript, `performance.now()`, `Date.now()`, el tiempo entregado a `requestAnimationFrame()` y las animaciones Web Animations API **no aumenta los FPS físicos**, ni el ancho de banda, ni acelera un servidor remoto. Algunos juegos se rigen por tiempos del backend, Workers o WebGL y pueden ignorar parcial o totalmente el ajuste. Los tiempos virtuales pueden alterar comportamientos dependientes de relojes, como expiraciones y firmas; volver a 1× si ocurre.
+**`Date.now()` y `performance.now()` permanecen reales y sincronizados con `Event.timeStamp`.** La versión anterior los adelantaba artificialmente, lo que podía romper interacciones, menús de compra, validaciones y tiempos del juego. Ahora solo se aceleran los temporizadores JavaScript, el tiempo **entregado al callback** de `requestAnimationFrame()` y las animaciones Web Animations API. Mientras el usuario presiona un botón del mouse o una tecla se pausa temporalmente la aceleración del fotograma/temporizadores y se reanuda 350 ms después de soltarlo. No se modifican ni sintetizan clics.
+
+El control WARP queda **plegado** en una pequeña etiqueta arriba a la derecha; al pulsarla aparecen las velocidades y se vuelve a plegar después de elegir una. **Alt+W** oculta o muestra completamente la etiqueta si tapa alguna opción.
+
+Esto **no aumenta los FPS físicos**, ni el ancho de banda, ni acelera el servidor remoto. Juegos que calculan su lógica directamente a partir de los relojes reales, Web Workers o WebGL podrían acelerar menos de lo deseado; se prioriza que las interacciones funcionen correctamente.
 
 La grabación HAR no utiliza interceptación de solicitudes, aunque el navegador continúa ejecutando las propias políticas de red/CORS del sitio y las funcionalidades habituales de Chromium.
 
@@ -61,14 +65,14 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-El workflow de GitHub Actions ejecuta pruebas unitarias en Windows y Linux y una prueba real de Chromium headless que abre dos pestañas, navega, hace POSTs, comprueba aislamiento de HAR y prueba el cambio de velocidad.
+El workflow de GitHub Actions ejecuta pruebas unitarias en Windows y Linux y una prueba real de Chromium headless que abre dos pestañas, navega, hace POSTs, comprueba aislamiento de HAR y prueba el cambio de velocidad. Una prueba adicional verifica los clics reales, las compras simuladas, la compatibilidad de los relojes y la aceleración en iframes a 8× y 16×.
 
 ## Arquitectura
 
 - `src/index.js` inicia un perfil de Chromium mediante `chromium.launchPersistentContext` y conserva las pestañas nativas.
 - `src/manager.js` vincula cada `Page` con su grabador, recibe eventos de red desde `BrowserContext` (incluida la navegación inicial) y gestiona cierres por separado.
 - `src/har.js` registra entradas HAR y frames WebSocket por pestaña en un diario temporal, y materializa los `.har` al cierre.
-- `src/preload.js` instala antes del código del sitio el reloj virtual y el pequeño panel de control.
+- `src/preload.js` instala antes del código del sitio un planificador virtual para animaciones y temporizadores (sin alterar los relojes reales) y el panel plegable de control.
 - `src/dialog.js` muestra un diálogo nativo de guardado (PowerShell WinForms en Windows; `zenity`/`kdialog` en Linux; AppleScript en macOS) y conserva copias recuperables si el guardado falla.
 
 No se necesita servidor remoto, cuenta de usuario ni permisos administrativos para utilizar el navegador, salvo los que requiera la instalación local de Chromium.

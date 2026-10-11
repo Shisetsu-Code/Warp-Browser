@@ -133,7 +133,7 @@ function cleanFilename(url, fallback = 'capture') {
 function makeHarHeader(title, started) {
   return {
     version: '1.2',
-    creator: { name: 'Warp Browser', version: '0.1.0' },
+    creator: { name: 'Warp Browser', version: '0.1.1' },
     browser: { name: 'Chromium (Playwright)' },
     pages: [{ startedDateTime: started, id: 'page_1', title, pageTimings: { onContentLoad: -1, onLoad: -1 } }]
   };
