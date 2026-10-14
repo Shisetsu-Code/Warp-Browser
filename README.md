@@ -77,7 +77,7 @@ El workflow de GitHub Actions ejecuta pruebas unitarias en Windows y Linux y una
 
 No se necesita servidor remoto, cuenta de usuario ni permisos administrativos para utilizar el navegador, salvo los que requiera la instalación local de Chromium.
 
-### Compatibilidad con Nolimit City (v0.1.2)
+### Compatibilidad con Nolimit City (v0.1.3)
 
 **Airport Security (Playin / Nolimit City)** usa un ticker propio de PIXI.js, GSAP y Spine. La versión 0.1.1 no aceleraba sus animaciones controladas por GSAP. Ahora el navegador: 
 
@@ -90,3 +90,12 @@ No se necesita servidor remoto, cuenta de usuario ni permisos administrativos pa
 En la consola de desarrollo del iframe del juego podés consultar `__warpGetEngineStatus()` para saber si se detectaron PIXI y GSAP. `selectedSpeed: 8` no asegura que toda la ronda dure 1/8: los tiempos impuestos por el servidor WebSocket y cualquier lógica no basada en estas bibliotecas son independientes. Los juegos de otros proveedores pueden necesitar integraciones adicionales.
 
 **Importante:** no subas capturas HAR de sesiones reales a repositorios públicos; pueden incluir cookies, tokens y datos de sesión.
+
+
+### Control de velocidad nativo en Airport Security (v0.1.3)
+
+El juego presenta un control de tirada rápida propio (`fastSpin`); la configuración capturada para la demo Playin indica `fastSpinEnabled: true`, `minimumSpinTime: 0` y operador `FANPAGE_DEMO`. La aplicación PIXI del juego usa `autoStart: false` y los renders se disparan con el ticker de GSAP; por eso un PIXI `ticker.speed=8` no equivale a una tirada ocho veces más rápida.
+
+En **esa demo identificable** (solo `funMode: true` y operador `FANPAGE_DEMO`) al seleccionar 2×, 4×, 8× o 16× Warp habilita además el modo de tirada rápida **oficial del cliente**. Usa nivel 2 solo si el propio juego declara soporte `supportFastSpinMega`. Al volver a 1× restaura el valor anterior, a menos que el usuario lo haya cambiado directamente en el juego. La protección de clics no desactiva el modo rápido durante una pulsación. **No se aplica automáticamente en partidas con dinero real** ni se generan acciones de apuesta o compra.
+
+El panel diagnostica motores mediante `__warpGetEngineStatus()`: `nativeFastSpin`, `gsap`, `pixiTickerRunning`. Estos indicadores solo confirman qué controles se aplicaron, no garantizan una duración de ronda exactamente proporcional al número seleccionado.

@@ -105,8 +105,58 @@
   // for GSAP, and is clamped by PIXI.Ticker. Never hook fetch/XHR/WebSocket or
   // modify event.timeStamp / native Date.now / performance.now.
   const engineBaselines = new WeakMap();
+  const nativeFastSpinState = new WeakMap();
   let gsapRoot = null;
-  let engineInfo = { pixi: false, gsap: false, gsapSource: null };
+  let engineInfo = { pixi: false, gsap: false, gsapSource: null, nativeFastSpin: null };
+
+  // Airport Security is primarily driven by GSAP, not by its PIXI.Application
+  // ticker (the application starts with autoStart:false). The demo also offers
+  // an official fast-spin mode which affects actual reel/flow durations. Use
+  // that only on an explicitly identifiable free-play demo, and restore it at 1x.
+  // No bet API is invoked and no network calls are intercepted or modified.
+  function updateDemoNativeFastSpin() {
+    let fastSpin, api;
+    try {
+      const plugins = window.NolimitLauncher?.constructor?.plugins;
+      if (!Array.isArray(plugins)) return null;
+      for (const plugin of plugins) {
+        api = plugin?.constructor?.apiPlugin;
+        if (api?.fastSpin) break;
+        api = null;
+      }
+      fastSpin = api?.fastSpin;
+      if (!fastSpin || typeof fastSpin.setSpeed !== 'function') return null;
+      const demo = api.options?.funMode === true &&
+        api.gameClientConfiguration?.operator === 'FANPAGE_DEMO';
+      const eligible = demo && fastSpin.isEnabled === true;
+      const before = Number(fastSpin.speed);
+      let saved = nativeFastSpinState.get(fastSpin);
+      if (!Number.isFinite(before)) return null;
+      if (eligible && selectedSpeed > 1) {
+        if (!saved) {
+          saved = { original: before, applied: null };
+          nativeFastSpinState.set(fastSpin, saved);
+        }
+        // Respect the provider's own supported values: 0=normal, 1=fast,
+        // 2=mega only where the game declares support.
+        const desired = selectedSpeed >= 8 && fastSpin._gameHasSupportMegaSupport ? 2 : 1;
+        if (saved.applied === null || before === saved.applied) {
+          if (before !== desired) fastSpin.setSpeed(desired);
+          saved.applied = desired;
+        }
+      } else if (saved && saved.applied !== null) {
+        // Don't override any changes the user made through the game's controls.
+        if (before === saved.applied && before !== saved.original) fastSpin.setSpeed(saved.original);
+        saved.applied = null;
+      }
+      return {
+        eligible,
+        enabled: Boolean(fastSpin.isFastSpin),
+        nativeSpeed: Number(fastSpin.speed),
+        gameMode: 'free-play'
+      };
+    } catch (_) { return null; }
+  }
 
   function scaleEngineClock(clock) {
     if (!clock || typeof clock.timeScale !== 'function') return false;
@@ -180,6 +230,9 @@
     if (gsapRoot) gsap = scaleEngineClock(gsapRoot);
     engineInfo.pixi = pixi;
     engineInfo.gsap = gsap;
+    engineInfo.pixiTickerRunning = window.__PIXI_APP__?.ticker?.started === true;
+    engineInfo.nativeFastSpin = updateDemoNativeFastSpin();
+    if (chip) refreshButtons();
   }
 
   // Use a native, unaccelerated interval: engines may finish loading after the
@@ -266,6 +319,9 @@
     if (!allowed.includes(next)) return selectedSpeed;
     selectedSpeed = next;
     if (!activePointers.size && !activeKeys.size && resumeHandle === null) setEffectiveSpeed(next);
+    // Native fast-spin is tied to the selected setting, not the temporary
+    // input-protection pause; a click on Spin must start in fast mode.
+    updateGameEngines();
     refreshButtons();
     return selectedSpeed;
   }
@@ -277,7 +333,7 @@
   // game's buttons unless explicitly expanded. Alt+W hides it entirely.
   let panel, chip, menu, buttons = [];
   function refreshButtons() {
-    if (chip) chip.textContent = `WARP ${selectedSpeed}×`;
+    if (chip) chip.textContent = `WARP ${selectedSpeed}×${engineInfo.nativeFastSpin?.eligible && engineInfo.nativeFastSpin?.enabled && selectedSpeed > 1 ? ' TURBO' : ''}`;
     for (const button of buttons) {
       const selected = Number(button.dataset.speed) === selectedSpeed;
       button.style.background = selected ? '#2563eb' : '#252e43';
