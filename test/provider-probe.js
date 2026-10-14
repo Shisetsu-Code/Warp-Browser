@@ -69,10 +69,60 @@ async function statuses(page) {
       await sleep(1000);
     }
     console.log('READINESS:', readiness);
+
+    async function runtimeDetail() {
+      const list = [];
+      for (const frame of page.frames()) {
+        try {
+          const value = await frame.evaluate(() => {
+            const plugins = window.NolimitLauncher?.constructor?.plugins || [];
+            const game = plugins.find(p => p?.constructor?.speedster)?.constructor;
+            const api = game?.apiPlugin;
+            const ctrl = game?.gameFlowController;
+            const app = window.__PIXI_APP__;
+            const slowButtons = Array.from(document.querySelectorAll('button'))
+              .slice(0, 25).map(b => ({ text: b.textContent.trim().slice(0,40), aria:b.getAttribute('aria-label')?.slice(0,50) }));
+            const pixiNodes = [];
+            if (app?.stage) {
+              const nodes = [{ item: app.stage, depth: 0 }];
+              let count = 0;
+              while (nodes.length && count < 3000) {
+                const { item, depth } = nodes.shift(); count++;
+                if (/spin|skip|fast|speed|play/i.test(item?.name || '') && pixiNodes.length < 30) {
+                  pixiNodes.push({ name: String(item.name).slice(0,60), interactive: Boolean(item.interactive), x:Math.round(item.x||0), y:Math.round(item.y||0) });
+                }
+                if (depth < 9 && Array.isArray(item?.children)) {
+                  for(const child of item.children) nodes.push({item:child,depth:depth+1});
+                }
+              }
+            }
+            let rootScale = null;
+            try {
+              const speedster=game?.speedster?.constructor;
+              const probe=speedster?.setTimeline?.call(speedster,null,null);
+              rootScale=(probe?.parent || probe?._dp)?.timeScale?.() ?? null;
+              probe?.kill?.();
+            } catch(_) {}
+            return {
+              game:game?.name || null,
+              fastSpin:api?.fastSpin ? {isEnabled:api.fastSpin.isEnabled, speed:api.fastSpin.speed, isFastSpin:api.fastSpin.isFastSpin} : null,
+              round:ctrl ? {mode:ctrl._mode,presentation:ctrl._currentPresentation?.constructor?.name || null,minMs:ctrl._minimumGameRoundTimeInMs} : null,
+              gsapRootScale:rootScale,
+              appTicker:app?.ticker ? {speed:app.ticker.speed,deltaTime:app.ticker.deltaTime} : null,
+              domButtons:slowButtons,
+              pixiNodes
+            };
+          });
+          if (value.game || value.appTicker) list.push(value);
+        } catch (_) { /* navigation race */ }
+      }
+      return list;
+    }
     console.log('BEFORE:', JSON.stringify(await statuses(page)));
     await manager.setSpeed(page, 8);
     await sleep(1000);
     console.log('AFTER_8X:', JSON.stringify(await statuses(page)));
+    console.log('RUNTIME_8X:', JSON.stringify(await runtimeDetail()));
     await manager.setSpeed(page, 1);
     await sleep(350);
     console.log('AFTER_1X:', JSON.stringify(await statuses(page)));
