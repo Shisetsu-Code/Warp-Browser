@@ -123,6 +123,31 @@ async function statuses(page) {
     await sleep(1000);
     console.log('AFTER_8X:', JSON.stringify(await statuses(page)));
     console.log('RUNTIME_8X:', JSON.stringify(await runtimeDetail()));
+    try {
+      await page.screenshot({ path: 'provider-public-demo.png', fullPage: false });
+      console.log('SCREENSHOT: saved provider-public-demo.png');
+      const pluginControls = [];
+      for (const frame of page.frames()) {
+        try {
+          const controls = await frame.evaluate(() => {
+            const plugins = window.NolimitLauncher?.constructor?.plugins;
+            if (!Array.isArray(plugins)) return [];
+            return plugins.map(plugin => ({
+              plugin: plugin?.constructor?.name || null,
+              hasClickSpin: typeof plugin?.clickSpin === 'function',
+              interactionEnabled: typeof plugin?.interactionEnabled === 'boolean' ? plugin.interactionEnabled : null,
+              viewHasSpinButton: Boolean(plugin?._view?.betPanel?.spinButton),
+              viewSpinEnabled: typeof plugin?._view?.betPanel?.spinButton?.enabled === 'boolean'
+                ? plugin._view.betPanel.spinButton.enabled : null,
+              modelInitialized: Boolean(plugin?.constructor?.gameFlowController)
+            }));
+          });
+          pluginControls.push(...controls);
+        } catch (_) { /* transient frame */ }
+      }
+      console.log('PLUGIN_CONTROLS:', JSON.stringify(pluginControls));
+    } catch (error) { console.log('SCREENSHOT_ERROR:', String(error.message).split('\n')[0].slice(0,90)); }
+
     await manager.setSpeed(page, 1);
     await sleep(350);
     console.log('AFTER_1X:', JSON.stringify(await statuses(page)));

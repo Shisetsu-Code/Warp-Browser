@@ -21,3 +21,11 @@ jobs:
       - run: node test/provider-probe.js
         env:
           RUN_DEMO_SPINS: "1"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-demo-screenshot
+          path: provider-public-demo.png
+          if-no-files-found: ignore
+          retention-days: 1
