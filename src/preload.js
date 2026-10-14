@@ -24,9 +24,10 @@
   let timerId = 1_000_000_000;
   const timers = new Map();
 
-  // Only the clock passed to requestAnimationFrame and the timer scheduler is
-  // virtual. Browser APIs, PointerEvent.timeStamp, performance.now and Date.now
-  // all remain on the same real timeline.
+  // Timers and generic RAF timestamps are virtual. PIXI gets real RAF timestamps
+  // and a scaled ticker.speed instead; combining both would accelerate twice.
+  // Date.now(), performance.now(), input event timestamps, and network clocks
+  // remain real.
   function virtualNow() {
     return virtualAnchor + (native.now() - realAnchor) * effectiveSpeed;
   }
@@ -77,7 +78,12 @@
   window.clearTimeout = clearTimer;
   window.setInterval = (callback, delay, ...args) => createTimer(callback, delay, true, args);
   window.clearInterval = clearTimer;
-  window.requestAnimationFrame = callback => native.raf(() => callback.call(window, virtualNow()));
+  window.requestAnimationFrame = callback => native.raf(timestamp => {
+    // PIXI's own Ticker multiplies deltaMS by ticker.speed. Passing a virtual
+    // timestamp as well would double-scale it and hit its 100 ms safety clamp.
+    const pixiTicker = window.PIXI?.Ticker;
+    callback.call(window, pixiTicker ? timestamp : virtualNow());
+  });
 
   if (typeof native.animate === 'function') {
     Element.prototype.animate = function (...args) {
@@ -94,6 +100,96 @@
       }
     } catch (_) { /* e.g. animation removed during enumeration */ }
   }
+  // Engine clocks: Nolimit City Airport Security exposes __PIXI_APP__ and
+  // bundles GSAP privately. Accelerating RAF arguments alone is not sufficient
+  // for GSAP, and is clamped by PIXI.Ticker. Never hook fetch/XHR/WebSocket or
+  // modify event.timeStamp / native Date.now / performance.now.
+  const engineBaselines = new WeakMap();
+  let gsapRoot = null;
+  let engineInfo = { pixi: false, gsap: false, gsapSource: null };
+
+  function scaleEngineClock(clock) {
+    if (!clock || typeof clock.timeScale !== 'function') return false;
+    try {
+      if (!engineBaselines.has(clock)) {
+        const initial = clock.timeScale();
+        if (!Number.isFinite(initial) || initial <= 0) return false;
+        engineBaselines.set(clock, initial);
+      }
+      const target = engineBaselines.get(clock) * effectiveSpeed;
+      if (clock.timeScale() !== target) clock.timeScale(target);
+      return true;
+    } catch (_) { return false; }
+  }
+
+  function scalePixiTicker(ticker) {
+    if (!ticker || typeof ticker.speed !== 'number') return false;
+    try {
+      if (!engineBaselines.has(ticker)) {
+        if (!Number.isFinite(ticker.speed) || ticker.speed <= 0) return false;
+        engineBaselines.set(ticker, ticker.speed);
+      }
+      const target = engineBaselines.get(ticker) * effectiveSpeed;
+      if (ticker.speed !== target) ticker.speed = target;
+      return true;
+    } catch (_) { return false; }
+  }
+
+  function findGsapRoot() {
+    try {
+      if (window.gsap?.globalTimeline?.timeScale) {
+        return { root: window.gsap.globalTimeline, source: 'global' };
+      }
+      // Nolimit City's source exports window.NolimitLauncher, but GSAP lives
+      // inside its webpack bundle. The game's Speedster.setTimeline() factory
+      // creates a GSAP Timeline; its parent is the engine-wide root. This uses
+      // the game's public runtime objects, not source rewriting or request hooks.
+      const plugins = window.NolimitLauncher?.constructor?.plugins;
+      if (!Array.isArray(plugins)) return null;
+      for (const plugin of plugins) {
+        const speedster = plugin?.constructor?.speedster;
+        const factory = speedster?.constructor?.setTimeline;
+        if (typeof factory !== 'function') continue;
+        const probe = factory.call(speedster.constructor, null, null);
+        const root = probe?.parent || probe?._dp;
+        try { probe?.kill?.(); } catch (_) { /* avoid lingering probe */ }
+        if (typeof root?.timeScale === 'function') {
+          return { root, source: 'nolimit-speedster' };
+        }
+      }
+    } catch (_) { /* unsupported game, leave default behavior */ }
+    return null;
+  }
+
+  function updateGameEngines() {
+    let pixi = false, gsap = false;
+    try {
+      const appTicker = window.__PIXI_APP__?.ticker;
+      const sharedTicker = window.PIXI?.Ticker?.shared;
+      pixi = scalePixiTicker(appTicker) || pixi;
+      pixi = scalePixiTicker(sharedTicker) || pixi;
+      // Never scale PIXI.Ticker.system: it handles interaction/pointer upkeep.
+    } catch (_) { /* engine not initialized */ }
+    if (!gsapRoot) {
+      const found = findGsapRoot();
+      if (found) {
+        gsapRoot = found.root;
+        engineInfo.gsapSource = found.source;
+      }
+    }
+    if (gsapRoot) gsap = scaleEngineClock(gsapRoot);
+    engineInfo.pixi = pixi;
+    engineInfo.gsap = gsap;
+  }
+
+  // Use a native, unaccelerated interval: engines may finish loading after the
+  // user selected 8×, without requiring another click in Warp's toolbar.
+  native.setInterval(updateGameEngines, 500);
+  Object.defineProperty(window, '__warpGetEngineStatus', {
+    value: () => ({ ...engineInfo, selectedSpeed, effectiveSpeed }),
+    configurable: false
+  });
+
   function setEffectiveSpeed(next) {
     if (next === effectiveSpeed) return;
     const now = native.now();
@@ -106,6 +202,7 @@
       schedule(id, timer);
     }
     setAnimationRates(oldSpeed, effectiveSpeed);
+    updateGameEngines();
   }
 
   // Guard interaction frames from accelerated timers/animations. We change
@@ -212,7 +309,7 @@
       button.type = 'button';
       button.dataset.speed = String(x);
       button.textContent = x + '×';
-      button.title = 'Acelerar temporizadores y animaciones, manteniendo clics y relojes reales';
+      button.title = 'Acelerar JS, PIXI y GSAP cuando estén disponibles, sin alterar clics ni tráfico';
       button.style.cssText = 'border:0;border-radius:6px;padding:5px 7px;cursor:pointer;font:600 12px system-ui,sans-serif;';
       button.addEventListener('click', () => {
         setSpeed(x);

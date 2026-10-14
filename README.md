@@ -33,7 +33,7 @@ En Linux/macOS se utilizan los mismos tres comandos de la terminal (sin el `.bat
 
 Requests HTTP y HTTPS sin filtrado de URL ni método: navegación, fetch/XHR, POSTs, headers, query strings, request bodies, respuestas, contenidos textuales y binarios (por ejemplo JS, imágenes o WebAssembly), tiempos y requests fallidas. El HAR usa el estándar 1.2. Los **mensajes de WebSocket** enviados/recibidos se adjuntan como una extensión del HAR (`log._warpWebSockets`) ya que las tramas no forman parte del formato HAR estándar. Requests de service workers que no pueden asociarse a una pestaña se guardan en una captura adicional al terminar la sesión.
 
-### Alcance real de la aceleración (v0.1.1: clics compatibles)
+### Alcance real de la aceleración (clics compatibles desde v0.1.1)
 
 **`Date.now()` y `performance.now()` permanecen reales y sincronizados con `Event.timeStamp`.** La versión anterior los adelantaba artificialmente, lo que podía romper interacciones, menús de compra, validaciones y tiempos del juego. Ahora solo se aceleran los temporizadores JavaScript, el tiempo **entregado al callback** de `requestAnimationFrame()` y las animaciones Web Animations API. Mientras el usuario presiona un botón del mouse o una tecla se pausa temporalmente la aceleración del fotograma/temporizadores y se reanuda 350 ms después de soltarlo. No se modifican ni sintetizan clics.
 
@@ -76,3 +76,17 @@ El workflow de GitHub Actions ejecuta pruebas unitarias en Windows y Linux y una
 - `src/dialog.js` muestra un diálogo nativo de guardado (PowerShell WinForms en Windows; `zenity`/`kdialog` en Linux; AppleScript en macOS) y conserva copias recuperables si el guardado falla.
 
 No se necesita servidor remoto, cuenta de usuario ni permisos administrativos para utilizar el navegador, salvo los que requiera la instalación local de Chromium.
+
+### Compatibilidad con Nolimit City (v0.1.2)
+
+**Airport Security (Playin / Nolimit City)** usa un ticker propio de PIXI.js, GSAP y Spine. La versión 0.1.1 no aceleraba sus animaciones controladas por GSAP. Ahora el navegador: 
+
+- Ajusta la velocidad del ticker de la aplicación PIXI y del ticker compartido (no el ticker de sistema, para proteger entradas).
+- Localiza la línea de tiempo raíz de GSAP dentro del juego mediante el `Speedster` expuesto por `NolimitLauncher`, sin modificar ni interceptar requests y sin introducir scripts del proveedor en el repositorio.
+- Usa marcas de tiempo **reales** en los callbacks `requestAnimationFrame` de PIXI para impedir acelerar dos veces y evita cambiar `Date.now()` y `performance.now()`.
+- Mantiene 1× mientras se realiza un clic o una pulsación; restablece la velocidad seleccionada después de 350 ms.
+- Aplica el ajuste cuando las bibliotecas terminan de cargar, incluso si ya habías seleccionado 8×.
+
+En la consola de desarrollo del iframe del juego podés consultar `__warpGetEngineStatus()` para saber si se detectaron PIXI y GSAP. `selectedSpeed: 8` no asegura que toda la ronda dure 1/8: los tiempos impuestos por el servidor WebSocket y cualquier lógica no basada en estas bibliotecas son independientes. Los juegos de otros proveedores pueden necesitar integraciones adicionales.
+
+**Importante:** no subas capturas HAR de sesiones reales a repositorios públicos; pueden incluir cookies, tokens y datos de sesión.
