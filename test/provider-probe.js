@@ -204,29 +204,50 @@ async function statuses(page) {
         console.log('AFTER_GATES:', JSON.stringify(menuStatus));
       } catch (err) { console.log('AFTER_GATES_ERROR:', String(err.message).slice(0,100)); }
       await page.screenshot({path:'provider-public-demo-after-gate.png',fullPage:false}).catch(()=>{});
-      // Normal free-play rounds only. Space invokes the game's own clickSpin
-      // handler; Warp never constructs or alters game requests.
+      // Click the prominent on-canvas SPIN control using a trusted mouse click
+      // in the 1280×900 demo viewport. Watch flow-state transitions instead of
+      // _currentPresentation truthiness (IDLE itself has a presentation).
+      async function sampleState() {
+        return await gameFrame.evaluate(() => {
+          const plugins=window.NolimitLauncher?.constructor?.plugins || [];
+          const game=plugins.find(p=>p?.constructor?.gameFlowController)?.constructor;
+          const flow=game?.gameFlowController;
+          return {
+            state: String(flow?._currentPresentationController?.state ?? 'none'),
+            presentation:flow?._currentPresentation?.constructor?.name||null,
+            mode:String(flow?._mode||''),
+            fastSpin:game?.apiPlugin?.fastSpin?.speed??null,
+            frameTime:performance.now()
+          };
+        });
+      }
       for (const chosen of [1, 8]) {
         await manager.setSpeed(page, chosen);
-        let started = false, idleCounter = 0, samples = 0;
-        const begin = Date.now();
+        await sleep(450);
+        const idle = await sampleState();
+        let began = false, finished = false, samples = 0, last = null;
+        const changes = [{at:0,...idle}];
+        let stableIdle=0;
+        const begin=Date.now();
         try {
-          await gameFrame.locator('body').press('Space');
-          while (Date.now() - begin < 18000) {
-            await sleep(90);
-            const st = await gameFrame.evaluate(() => {
-              const plugins = window.NolimitLauncher?.constructor?.plugins || [];
-              const game = plugins.find(x => x?.constructor?.speedster)?.constructor;
-              return Boolean(game?.gameFlowController?._currentPresentation);
-            });
+          await page.mouse.click(1169, 567, {delay:40});
+          while (Date.now()-begin < 14000) {
+            await sleep(70);
+            const st=await sampleState();
             samples++;
-            if (st) { started = true; idleCounter = 0; }
-            else if (started && ++idleCounter > 4) break;
+            if(st.state!==last) {
+              last=st.state;
+              changes.push({at:Date.now()-begin,...st});
+            }
+            if(st.state!==idle.state) {began=true; stableIdle=0;}
+            else if(began && ++stableIdle>=3){finished=true;break;}
           }
-          console.log('SPIN_SAMPLE:', JSON.stringify({selectedSpeed:chosen, began:started,
-            elapsedMs:Date.now()-begin, samples}));
-        } catch (e) { console.log('SPIN_SAMPLE_ERROR:', chosen, String(e.message).split('\n')[0].slice(0,120)); }
+          console.log('SPIN_FLOW:', JSON.stringify({selectedSpeed:chosen, idleState:idle.state,began,finished,
+            elapsedMs:Date.now()-begin,samples,changes:changes.slice(0,35)}));
+        } catch(error) {console.log('SPIN_SAMPLE_ERROR:',chosen,String(error.message).split('\n')[0].slice(0,160));}
+        await sleep(900);
       }
+
     }
 
   } finally {
