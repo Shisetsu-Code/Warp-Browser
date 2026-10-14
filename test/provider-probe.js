@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-const url = 'https://demo.nolimitcdn.com/loader/loader-desktop.html?operator=FANPAGE_DEMO&game=AirportSecurity&language=en&provider=nlc';
+const url = 'https://playin.com/embed/v1/demo/AirportSecurity';
 async function statuses(page) {
   const values = [];
   for (const frame of page.frames()) {
