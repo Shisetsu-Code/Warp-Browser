@@ -185,8 +185,15 @@ async function statuses(page) {
       for (const f of page.frames()) {
         if (await pressIfVisible(f.getByText(/Yes,?\s*I['’]m\s*18\s*or\s*older/i), 'age-confirm')) break;
       }
-      await pressIfVisible(gameFrame.getByText(/^continue$/i), 'continue');
-      await sleep(1600);
+      const continuedByDom = await pressIfVisible(gameFrame.getByText(/^continue$/i), 'continue');
+      if (!continuedByDom) {
+        // The provider renders its Continue splash inside a PIXI canvas, not
+        // into the DOM. The test uses a normal trusted pointer click at the
+        // documented 1280x900 demo viewport instead of calling private APIs.
+        await page.mouse.click(639, 702);
+        console.log('DEMO_GATE_CLICK: continue-canvas');
+      }
+      await sleep(2500);
       try {
         const menuStatus = await gameFrame.evaluate(() => ({
           selected: window.__warpGetSpeed?.(),
