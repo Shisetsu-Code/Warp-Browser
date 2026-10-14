@@ -19,3 +19,5 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: node test/provider-probe.js
+        env:
+          RUN_DEMO_SPINS: "1"

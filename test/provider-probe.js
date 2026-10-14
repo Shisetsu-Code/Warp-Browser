@@ -126,6 +126,46 @@ async function statuses(page) {
     await manager.setSpeed(page, 1);
     await sleep(350);
     console.log('AFTER_1X:', JSON.stringify(await statuses(page)));
+    async function findGameFrame() {
+      for (const frame of page.frames()) {
+        try {
+          if (await frame.evaluate(() => Boolean(
+            window.NolimitLauncher?.constructor?.plugins?.some(
+              plugin => plugin?.constructor?.apiPlugin?.options?.funMode === true &&
+                plugin?.constructor?.apiPlugin?.gameClientConfiguration?.operator === 'FANPAGE_DEMO'
+            ) && window.__PIXI_APP__?.stage
+          ))) return frame;
+        } catch (_) { /* navigation race */ }
+      }
+      return null;
+    }
+    const gameFrame = await findGameFrame();
+    if (gameFrame && process.env.RUN_DEMO_SPINS === '1') {
+      // Normal free-play rounds only. Space invokes the game's own clickSpin
+      // handler; Warp never constructs or alters game requests.
+      for (const chosen of [1, 8]) {
+        await manager.setSpeed(page, chosen);
+        let started = false, idleCounter = 0, samples = 0;
+        const begin = Date.now();
+        try {
+          await gameFrame.locator('body').press('Space');
+          while (Date.now() - begin < 18000) {
+            await sleep(90);
+            const st = await gameFrame.evaluate(() => {
+              const plugins = window.NolimitLauncher?.constructor?.plugins || [];
+              const game = plugins.find(x => x?.constructor?.speedster)?.constructor;
+              return Boolean(game?.gameFlowController?._currentPresentation);
+            });
+            samples++;
+            if (st) { started = true; idleCounter = 0; }
+            else if (started && ++idleCounter > 4) break;
+          }
+          console.log('SPIN_SAMPLE:', JSON.stringify({selectedSpeed:chosen, began:started,
+            elapsedMs:Date.now()-begin, samples}));
+        } catch (e) { console.log('SPIN_SAMPLE_ERROR:', chosen, String(e.message).split('\n')[0].slice(0,120)); }
+      }
+    }
+
   } finally {
     if (context) await context.close().catch(() => {});
     if (manager) await manager.shutdown().catch(err => console.log('SHUTDOWN_WARN', err.message.slice(0, 80)));
