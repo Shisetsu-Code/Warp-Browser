@@ -166,6 +166,37 @@ async function statuses(page) {
     }
     const gameFrame = await findGameFrame();
     if (gameFrame && process.env.RUN_DEMO_SPINS === '1') {
+      // The free-play launcher presents a click-through age confirmation, then
+      // a separate Continue splash. Neither Space nor the game controls can
+      // trigger a spin until these overlays have been dismissed normally.
+      async function pressIfVisible(locator, label) {
+        try {
+          if (await locator.count() && await locator.first().isVisible()) {
+            await locator.first().click({ timeout: 10000 });
+            console.log('DEMO_GATE_CLICK:', label);
+            await sleep(1000);
+            return true;
+          }
+        } catch (error) {
+          console.log('DEMO_GATE_ERROR:', label, String(error.message).split('\n')[0].slice(0, 100));
+        }
+        return false;
+      }
+      for (const f of page.frames()) {
+        if (await pressIfVisible(f.getByText(/Yes,?\s*I['’]m\s*18\s*or\s*older/i), 'age-confirm')) break;
+      }
+      await pressIfVisible(gameFrame.getByText(/^continue$/i), 'continue');
+      await sleep(1600);
+      try {
+        const menuStatus = await gameFrame.evaluate(() => ({
+          selected: window.__warpGetSpeed?.(),
+          text: [...document.querySelectorAll('button')].filter(x=>x.offsetParent).map(x=>x.textContent.trim().slice(0,50)).slice(0,25),
+          spin: window.NolimitLauncher?.constructor?.plugins?.map(p => ({name:p?.constructor?.name || null,enabled:p?.interactionEnabled,spin:typeof p?.clickSpin==='function'})).filter(x=>x.spin),
+          ageGateText:document.body.innerText.slice(0,500)
+        }));
+        console.log('AFTER_GATES:', JSON.stringify(menuStatus));
+      } catch (err) { console.log('AFTER_GATES_ERROR:', String(err.message).slice(0,100)); }
+      await page.screenshot({path:'provider-public-demo-after-gate.png',fullPage:false}).catch(()=>{});
       // Normal free-play rounds only. Space invokes the game's own clickSpin
       // handler; Warp never constructs or alters game requests.
       for (const chosen of [1, 8]) {

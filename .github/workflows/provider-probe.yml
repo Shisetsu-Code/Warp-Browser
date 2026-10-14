@@ -26,6 +26,8 @@ jobs:
         if: always()
         with:
           name: public-demo-screenshot
-          path: provider-public-demo.png
+          path: |
+            provider-public-demo.png
+            provider-public-demo-after-gate.png
           if-no-files-found: ignore
           retention-days: 1
