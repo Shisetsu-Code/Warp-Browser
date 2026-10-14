@@ -1,0 +1,21 @@
+name: Provider diagnostic (free-play only)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/provider-probe.yml
+      - test/provider-probe.js
+      - src/preload.js
+      - src/manager.js
+jobs:
+  nolimit-public-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: node test/provider-probe.js
