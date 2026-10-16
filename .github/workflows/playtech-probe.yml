@@ -1,0 +1,20 @@
+name: GPAS public demo clock probe (read-only)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'test/playtech-live-probe.js'
+      - '.github/workflows/playtech-probe.yml'
+jobs:
+  gpas-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: node test/playtech-live-probe.js
