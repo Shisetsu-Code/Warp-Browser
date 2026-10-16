@@ -77,7 +77,7 @@ test('GPAS GWT engine advances at 8x but native clocks/clicks/requests stay inta
       assert.equal(await page.evaluate(()=>__warpGetGpasStatus().supported),true);
       const before=await page.evaluate(()=>game.elapsed);
       await wait(400);
-      const normal=await page.evaluate(()=>game.elapsed-before);
+      const normal=await page.evaluate(previous => game.elapsed - previous, before);
       assert.ok(normal>100 && normal<700,'1x engine clock: '+normal);
       await manager.setSpeed(page,8);
       const a=await page.evaluate(()=>({game:game.elapsed,real:Date.now()}));
