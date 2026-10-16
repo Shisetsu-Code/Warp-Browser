@@ -40,6 +40,7 @@ class BrowserManager {
       await this.setSpeed(page, speed);
     });
     await this.context.addInitScript({ path: require('node:path').join(__dirname, 'preload.js') });
+    await this.context.addInitScript({ path: require('node:path').join(__dirname, 'playtech-gwt.js') });
     for (const page of this.context.pages()) this.registerPage(page);
   }
 

@@ -99,3 +99,9 @@ El juego presenta un control de tirada rápida propio (`fastSpin`); la configura
 En **esa demo identificable** (solo `funMode: true` y operador `FANPAGE_DEMO`) al seleccionar 2×, 4×, 8× o 16× Warp habilita además el modo de tirada rápida **oficial del cliente**. Usa nivel 2 solo si el propio juego declara soporte `supportFastSpinMega`. Al volver a 1× restaura el valor anterior, a menos que el usuario lo haya cambiado directamente en el juego. La protección de clics no desactiva el modo rápido durante una pulsación. **No se aplica automáticamente en partidas con dinero real** ni se generan acciones de apuesta o compra.
 
 El panel diagnostica motores mediante `__warpGetEngineStatus()`: `nativeFastSpin`, `gsap`, `pixiTickerRunning`. Estos indicadores solo confirman qué controles se aplicaron, no garantizan una duración de ronda exactamente proporcional al número seleccionado.
+
+## Compatibilidad Playtech GPAS (v0.1.4)
+
+Para juegos como Buffalo Blitz II (ruta `gpasclient.html`) se detecta el bucle GWT específico de Playtech. Su temporizador de simulación utiliza `Date.now()` y no el timestamp de `requestAnimationFrame`, por lo que las versiones anteriores no aceleraban el motor. Ahora Warp escala exclusivamente las consultas a `Date.now()` realizadas durante el callback de renderizado GWT; fuera de ese callback se conserva el reloj del navegador, los eventos del mouse y toda la comunicación HTTP/WebSocket.
+
+El diagnóstico está disponible en la consola del frame correspondiente con `window.__warpGetGpasStatus?.()` (campo `supported` y contador `acceleratedFrames`). Si `supported` es `false`, no se detectó el bucle GWT compatible y no debe suponerse una aceleración real. Las esperas impuestas por el servidor continúan sin alteraciones. El script también admite `localhost` únicamente para pruebas locales de esta ruta. No incorpora archivos ni datos personales del HAR.
