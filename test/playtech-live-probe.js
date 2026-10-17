@@ -52,7 +52,10 @@ async function main(){
     const frame=after.find(x=>x.status?.supported);
     if(frame){
       console.log('RESULT: DETECTED_GPAS_GWT', 'scaledFrames='+frame.status.acceleratedFrames,
-        'lastStepMs='+frame.status.lastStepMS);
+        'lastStepMs='+frame.status.lastStepMS,
+        'clockMultiplier='+frame.status.clockMultiplier,
+        'clockVerified='+frame.status.confirmed,
+        'reinstalls='+frame.status.reinstalls);
     } else {
       console.log('RESULT: INCONCLUSIVE_NOT_LOADED');
     }

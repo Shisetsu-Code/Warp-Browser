@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'test/playtech-live-probe.js'
+      - 'src/playtech-gwt.js'
+      - 'src/preload.js'
+      - 'src/manager.js'
       - '.github/workflows/playtech-probe.yml'
 jobs:
   gpas-demo:
