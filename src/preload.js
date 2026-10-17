@@ -332,8 +332,40 @@
   // Compact panel: unlike v0.1.0, the full-width toolbar never covers the
   // game's buttons unless explicitly expanded. Alt+W hides it entirely.
   let panel, chip, menu, buttons = [];
+  let gpasSummary = null;
+  // The manager reports the measured GWT clock from any cross-origin iframe.
+  Object.defineProperty(window, '__warpSetEngineStatus', {
+    value: value => {
+      if (!value || typeof value !== 'object') return false;
+      gpasSummary = {
+        detected: value.detected === true,
+        live: value.live === true,
+        confirmed: value.confirmed === true,
+        clockMultiplier: Number.isFinite(value.clockMultiplier) ? value.clockMultiplier : null
+      };
+      refreshButtons();
+      return true;
+    }, configurable: false
+  });
+  Object.defineProperty(window, '__warpGetEngineSummary', {
+    value: () => gpasSummary ? { ...gpasSummary } : null, configurable: false
+  });
   function refreshButtons() {
-    if (chip) chip.textContent = `WARP ${selectedSpeed}×${engineInfo.nativeFastSpin?.eligible && engineInfo.nativeFastSpin?.enabled && selectedSpeed > 1 ? ' TURBO' : ''}`;
+    if (chip) {
+      const turbo = engineInfo.nativeFastSpin?.eligible &&
+        engineInfo.nativeFastSpin?.enabled && selectedSpeed > 1;
+      const verified = selectedSpeed > 1 && gpasSummary?.confirmed &&
+        Number.isFinite(gpasSummary?.clockMultiplier);
+      const suffix = selectedSpeed === 1 ? '' : verified
+        ? ` · GWT ${gpasSummary.clockMultiplier.toFixed(1)}×`
+        : (gpasSummary?.detected ? ' · GWT …' : ' · ?');
+      chip.textContent = `WARP ${selectedSpeed}×${turbo ? ' TURBO' : ''}${suffix}`;
+      chip.title = selectedSpeed === 1
+        ? 'Velocidad normal del navegador'
+        : verified
+          ? `${selectedSpeed}× seleccionado. Reloj GWT medido: ${gpasSummary.clockMultiplier.toFixed(1)}×. No mide el tiempo total de cada tirada.`
+          : `${selectedSpeed}× seleccionado. Aceleración del motor GWT todavía no verificada; ? no significa que la tirada vaya más rápido.`;
+    }
     for (const button of buttons) {
       const selected = Number(button.dataset.speed) === selectedSpeed;
       button.style.background = selected ? '#2563eb' : '#252e43';
@@ -394,6 +426,11 @@
       if (menu) menu.style.display = 'none';
     }
   }, true);
+  // New/lazy frames sync speed even if navigation events were too early.
+  if (typeof window.__warpGetTabSpeed === 'function') {
+    Promise.resolve(window.__warpGetTabSpeed())
+      .then(value => setSpeed(value)).catch(() => {});
+  }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', installPanel, { once: true });
   } else {

@@ -19,6 +19,8 @@ class BrowserManager {
     this.inflight = new Map();
     this.handledRequests = new WeakSet();
     this.speedByPage = new Map();
+    this.gpasByPage = new Map();
+    this.gpasViews = new Map();
     this.closing = new Map();
     this.saveQueue = Promise.resolve();
     this.orphanRecorder = null;
@@ -39,6 +41,11 @@ class BrowserManager {
     await this.context.exposeBinding('__warpSpeedChange', async ({ page }, speed) => {
       await this.setSpeed(page, speed);
     });
+    // Frame navigations may race init scripts; new frames pull selected speed.
+    await this.context.exposeBinding('__warpGetTabSpeed', ({ page }) => this.speedByPage.get(page) || 1);
+    await this.context.exposeBinding('__warpReportGpasStatus', ({ page, frame }, report) => {
+      this.reportGpasStatus(page, frame, report);
+    });
     await this.context.addInitScript({ path: require('node:path').join(__dirname, 'preload.js') });
     await this.context.addInitScript({ path: require('node:path').join(__dirname, 'playtech-gwt.js') });
     for (const page of this.context.pages()) this.registerPage(page);
@@ -52,16 +59,67 @@ class BrowserManager {
     page.on('close', () => { void this.closePage(page); });
     page.on('websocket', ws => recorder.recordWebSocket(ws));
     page.on('framenavigated', frame => {
+      this.forgetGpasFrame(page, frame);
       if (frame === page.mainFrame()) recorder.updateURL(frame.url());
       const speed = this.speedByPage.get(page) || 1;
       if (speed !== 1) void this.applySpeedToFrame(frame, speed);
     });
+    page.on('framedetached', frame => this.forgetGpasFrame(page, frame));
     page.on('frameattached', frame => {
       const speed = this.speedByPage.get(page) || 1;
       if (speed !== 1) void this.applySpeedToFrame(frame, speed);
     });
     this.logger.log('[TAB +]', page.url());
     return recorder;
+  }
+
+
+  reportGpasStatus(page, frame, value) {
+    if (!this.sessions.has(page) || page.isClosed() || !frame ||
+        value?.engine !== 'playtech-gwt' || typeof value.detected !== 'boolean') return;
+    let frames = this.gpasByPage.get(page);
+    if (!frames) { frames = new Map(); this.gpasByPage.set(page, frames); }
+    const multiplier = Number(value.clockMultiplier);
+    frames.set(frame, {
+      detected: value.detected, live: value.live === true,
+      confirmed: value.confirmed === true,
+      selectedSpeed: Number(value.selectedSpeed),
+      clockMultiplier: Number.isFinite(multiplier) && multiplier >= 0 &&
+        multiplier <= 32 && value.clockMultiplier !== null ? multiplier : null,
+      time: Date.now()
+    });
+    this.renderGpasStatus(page);
+  }
+
+  forgetGpasFrame(page, frame) {
+    if (frame === page.mainFrame()) this.gpasByPage.delete(page);
+    else this.gpasByPage.get(page)?.delete(frame);
+    this.gpasViews.delete(page);
+    this.renderGpasStatus(page);
+  }
+
+  renderGpasStatus(page) {
+    if (page.isClosed()) return;
+    const selectedSpeed = this.speedByPage.get(page) || 1;
+    const reports = [...(this.gpasByPage.get(page)?.values() || [])]
+      .filter(s => s.detected && Date.now() - s.time < 4000);
+    const live = reports.filter(s => s.live);
+    // Verification measures only the GWT frame clock, not a complete spin.
+    const verified = live.find(s => s.confirmed &&
+      s.selectedSpeed === selectedSpeed && s.clockMultiplier !== null);
+    const summary = {
+      detected: reports.length > 0,
+      live: live.length > 0,
+      confirmed: Boolean(verified),
+      clockMultiplier: verified?.clockMultiplier ?? null
+    };
+    const key = JSON.stringify({ selectedSpeed, ...summary });
+    if (this.gpasViews.get(page) === key) return;
+    this.gpasViews.set(page, key);
+    void page.mainFrame().evaluate(value =>
+      window.__warpSetEngineStatus?.(value) === true, summary)
+      .then(ok => { if (!ok && this.gpasViews.get(page) === key) this.gpasViews.delete(page); })
+      .catch(() => { if (this.gpasViews.get(page) === key) this.gpasViews.delete(page); });
   }
 
   async applySpeedToFrame(frame, speed) {
@@ -72,6 +130,8 @@ class BrowserManager {
     const value = Number(speed);
     if (![1, 2, 4, 8, 16].includes(value) || page.isClosed()) return;
     this.speedByPage.set(page, value);
+    this.gpasViews.delete(page);
+    this.renderGpasStatus(page);
     await Promise.allSettled(page.frames().map(frame => this.applySpeedToFrame(frame, value)));
     this.logger.log(`[SPEED] ${value}x ${page.url()}`);
   }
@@ -129,6 +189,8 @@ class BrowserManager {
       } finally {
         this.sessions.delete(page);
         this.speedByPage.delete(page);
+        this.gpasByPage.delete(page);
+        this.gpasViews.delete(page);
       }
     })();
     this.closing.set(page, job);

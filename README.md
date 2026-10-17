@@ -105,3 +105,12 @@ El panel diagnostica motores mediante `__warpGetEngineStatus()`: `nativeFastSpin
 Para juegos como Buffalo Blitz II (ruta `gpasclient.html`) se detecta el bucle GWT específico de Playtech. Su temporizador de simulación utiliza `Date.now()` y no el timestamp de `requestAnimationFrame`, por lo que las versiones anteriores no aceleraban el motor. Ahora Warp escala exclusivamente las consultas a `Date.now()` realizadas durante el callback de renderizado GWT; fuera de ese callback se conserva el reloj del navegador, los eventos del mouse y toda la comunicación HTTP/WebSocket.
 
 El diagnóstico está disponible en la consola del frame correspondiente con `window.__warpGetGpasStatus?.()` (campo `supported` y contador `acceleratedFrames`). Si `supported` es `false`, no se detectó el bucle GWT compatible y no debe suponerse una aceleración real. Las esperas impuestas por el servidor continúan sin alteraciones. El script también admite `localhost` únicamente para pruebas locales de esta ruta. No incorpora archivos ni datos personales del HAR.
+
+
+### Detección dinámica Playtech GPAS/GWT (v0.1.5)
+
+El adaptador GWT se instala antes de ejecutar el JavaScript de **cada iframe**, sin depender de su dominio ni de la ruta `/gpasclient.html`. Solo modifica `fnRequestAnimationFrame` al reconocer la firma específica de GWT del HAR (`frameBudget`, `lastTick`, `requestAnimFrame`, `Date.now`); las páginas no reconocidas quedan intactas. Comprueba periódicamente los motores que cargan tarde o reemplazan la función y reaplica el ajuste tras cambios de URL.
+
+Cada iframe nuevo consulta la velocidad seleccionada para su pestaña. El chip distingue `WARP 8× · ?` (seleccionado pero no confirmado), `WARP 8× · GWT …` (detectado sin medición) y `WARP 8× · GWT 8.0×` (reloj de fotogramas GWT medido a ~8×). Este dato **no garantiza que la tirada completa dure 1/8**: esperas del servidor y otros relojes del juego pueden mantenerse reales. No se cambian requests, respuestas, WebSockets, ni marcas de tiempo de clics. Los HAR continúan siendo automáticos por pestaña.
+
+Las pruebas incluyen carga tardía, iframes de distinto origen, reinicio del motor, clics simulados y grabación HAR. No se ejecutan compras con dinero real.
