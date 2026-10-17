@@ -8,7 +8,9 @@
 
   const nativeDateNow = Date.now.bind(Date);
   const nativePerfNow = performance.now.bind(performance);
-  const nativeSetInterval = window.setInterval.bind(window);
+  // Run adapter probes on real time, not virtual game time.
+  const nativeSetInterval = typeof window.__warpNativeSetInterval === 'function'
+    ? window.__warpNativeSetInterval : window.setInterval.bind(window);
   const CLOCK_LIMIT_MS = 900;
   const DETECT_EVERY_MS = 350;
   const REPORT_EVERY_MS = 900;

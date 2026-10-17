@@ -7,7 +7,7 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../src/playtech-gwt.js'), 'utf8');
 
-function makeEngine({ domain = 'unrelated-game.example', pathname = '/random/inside-frame.html' } = {}) {
+function makeEngine({ domain = 'unrelated-game.example', pathname = '/random/inside-frame.html', useNative = false } = {}) {
   let clock = 200;
   let requested = 8;
   let effective = 8;
@@ -25,6 +25,10 @@ function makeEngine({ domain = 'unrelated-game.example', pathname = '/random/ins
     setInterval: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
     requestAnimFrame: fn => { browser.game.nextScheduled = fn === browser.fnRequestAnimationFrame; }
   };
+  if (useNative) {
+    browser.__warpNativeSetInterval = browser.setInterval;
+    browser.setInterval = () => { throw Error('Virtual game interval must not be used by engine probe'); };
+  }
   const context = vm.createContext({
     window: browser,
     Date: FakeDate,
@@ -107,4 +111,12 @@ test('unrelated frame callbacks are not modified, even if named fnRequestAnimati
   h.setRequested(16);
   h.pulse();
   assert.equal(h.browser.fnRequestAnimationFrame, innocent);
+});
+
+
+test('adapter uses the native unaccelerated scheduler when provided by preload', () => {
+  const h = makeEngine({ useNative: true });
+  assert.deepEqual(h.intervals.map(x => x.ms), [350, 900]);
+  h.installGame(); h.pulse(); h.frame(35);
+  assert.equal(h.browser.__warpGetGpasStatus().confirmed, true);
 });

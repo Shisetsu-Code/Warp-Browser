@@ -16,6 +16,8 @@
     raf: window.requestAnimationFrame.bind(window),
     animate: Element.prototype.animate
   };
+  // Keep diagnostics independent from Warp's accelerated game timers.
+  Object.defineProperty(window, '__warpNativeSetInterval', { value: native.setInterval, configurable: false });
   const allowed = [1, 2, 4, 8, 16];
   let selectedSpeed = 1;
   let effectiveSpeed = 1;
